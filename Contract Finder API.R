@@ -25,12 +25,17 @@ pacman::p_load(httr, jsonlite, tidyverse)
 
 #### Defining local Times / Dates ----
 
+print(paste("Start:", Sys.time()))
+
 # Variable contains the current date / week
 # Incorporating a new run each week / day to explore newly listed contracts
 today                <- Sys.Date()
 last_week            <- Sys.Date() - 7
 yesterday            <- Sys.Date() - 1
+last_2_years         <- Sys.Date() - (365 * 2)
 #day_before_yesterday <- Sys.Date() - 2
+
+# First entry: 2000-01-01
 
 # Defining end_date
 end_date <- yesterday
@@ -54,7 +59,7 @@ url <- "https://www.contractsfinder.service.gov.uk/Search/Results"
 #path  <- paste0("Published/Notices/OCDS/Search")
 # Searching To / From a specified date (today)
 path  <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
-                last_week, "&publishedTo=", end_date)
+                last_2_years, "&publishedTo=", end_date)
 path2 <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
                 start_date, "&publishedTo=", today)
 
@@ -119,7 +124,7 @@ response_func <- function(pages = maxPage, from = last_week, to = end_date,
 }
 
 # Running the function to generate what we need
-data  <- response_func(pages = maxPage, from = last_week, to = end_date)
+data  <- response_func(pages = maxPage, from = last_2_years, to = end_date)
 
 # Before running this line - update maxPage variable to assume the correct value
 data_2 <- response_func(pages = maxPage2, from = start_date, to = today)
@@ -134,6 +139,7 @@ fileConn <- file("last_run.txt")
 writeLines(as.character(end_date), fileConn)
 close(fileConn)
 
+print(paste("End:", Sys.time()))
 
 
 ####
