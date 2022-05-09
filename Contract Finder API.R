@@ -29,10 +29,11 @@ print(paste("Start:", Sys.time()))
 
 # Variable contains the current date / week
 # Incorporating a new run each week / day to explore newly listed contracts
-today                <- Sys.Date()
-last_week            <- Sys.Date() - 7
-yesterday            <- Sys.Date() - 1
-last_2_years         <- Sys.Date() - (365 * 2)
+today         <- Sys.Date()
+last_week     <- Sys.Date() - 7
+yesterday     <- Sys.Date() - 1
+last_2_years  <- Sys.Date() - (365 * 2)
+last_4_years  <- Sys.Date() - (365 * 4)
 #day_before_yesterday <- Sys.Date() - 2
 
 # First entry: 2000-01-01
@@ -58,25 +59,39 @@ url <- "https://www.contractsfinder.service.gov.uk/Search/Results"
 
 #path  <- paste0("Published/Notices/OCDS/Search")
 # Searching To / From a specified date (today)
-path  <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
+
+path_1  <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
+               last_4_years, "&publishedTo=", last_2_years)
+
+path_2 <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
                 last_2_years, "&publishedTo=", end_date)
-path2 <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
+
+path_3 <- paste0("Published/Notices/OCDS/Search?publishedFrom=", 
                 start_date, "&publishedTo=", today)
 
-# httr:GET() takes two arguments, url and path
-response  <- GET(url = url, path = path)
-response2 <- GET(url = url, path = path2)
 
-# jsonlie::fromJSON converts the reponse to a format we can work with and clean
-test  <-  fromJSON(rawToChar(response$content), flatten = TRUE)
-test2 <- fromJSON(rawToChar(response2$content), flatten = TRUE)
+# Defining a function to extract the max number of pages.
+# This is vital to deine how many iterations the loops will require.
+# Stored in a function for reproducability.
+page_function <- function(path) {
+  # httr:GET() takes two arguments, url and path
+  response <- GET(url = url, path = path)
+  # View the response in the console
+  print(response)
+  
+  # jsonlie::fromJSON converts the reponse to a format we can work with and clean
+  test <- fromJSON(rawToChar(response$content), flatten = TRUE)
+  # Define "maxPage" to determine the final iteration of our for loop
+  maxPage  <- test$maxPage
+  return(maxPage)
+}
 
-# Define "maxPage" to determine the final iteration of our for loop
-maxPage  <- test$maxPage
-maxPage2 <- test2$maxPage
+# Calling page_function()
+maxPage_1 <- page_function(path_1)
+maxPage_2 <- page_function(path_2)
+maxPage_3 <- page_function(path_3)
 
-# View the response in the console
-response
+
 
 
 #### Extracting data from the Response ----
@@ -124,10 +139,11 @@ response_func <- function(pages = maxPage, from = last_week, to = end_date,
 }
 
 # Running the function to generate what we need
-data  <- response_func(pages = maxPage, from = last_2_years, to = end_date)
+data_1  <- response_func(pages = maxPage_1, from = last_4_years, to = last_2_years)
 
-# Before running this line - update maxPage variable to assume the correct value
-data_2 <- response_func(pages = maxPage2, from = start_date, to = today)
+data_2 <- response_func(pages = maxPage_2, from = last_2_years, to = end_date)
+
+data_3 <- response_func(pages = maxPage_3, from = start_date, to = today)
 
 
 #### Date / Time Stamp ----
@@ -140,6 +156,13 @@ writeLines(as.character(end_date), fileConn)
 close(fileConn)
 
 print(paste("End:", Sys.time()))
+
+
+
+
+
+
+
 
 
 ####

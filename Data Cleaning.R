@@ -10,7 +10,11 @@ source("Contract Finder API.R")
 
 #### Data Cleaning ----
 
-response_clean <- function(data) {
+# Primary purpose of function - to reduce the number of variables stored in our database.
+# Original entry has over 100 fields, most of which are redundant for our purposes.
+#- data argument: which response to clean
+#- string argument: filters to be applied
+response_clean <- function(data, string = "analytic|Analytic") {
   data_clean <- data %>%
     #select(-c(82:ncol(.))) %>%
     # select only variables we are interested in
@@ -48,53 +52,45 @@ response_clean <- function(data) {
     filter(tag %in% c("award", "awardUpdate")) %>%
     # filter to keep only rows which contain the string pattern "analyic" 
     # (using the combination of grepl, and regex)
-    filter_all(any_vars(grepl("analytic|Analytic", .)))
+    #filter(grepl(string, awards.suppliers.name))
+    filter_all(any_vars(grepl(string, .)))
+    #filter_all(any_vars(grepl("analytic|Analytic", .)))
   return(data_clean)
 }    
   
+
+
 # Call response_clean() once for each response
-data_clean <- response_clean(data)
-data_clean2 <- response_clean(data_2)
+# Use "string" argument to specify clien we are interested in. Note this is case sensitive (for now)
+data_clean_1 <- response_clean(data_1, "analytic|Analytic")
+data_clean_2 <- response_clean(data_2, "analytic|Analytic")
+data_clean_3 <- response_clean(data_3, "analytic|Analytic")
 
 # Call "anti_join()" to maintain only the contents of data_clean2 not overlapping with data_clean
 # This will cover items found in the most recent run not contained in previous iterations
-data_clean3 <- anti_join(data_clean2, data_clean)
+data_clean_4     <- anti_join(data_clean_2, data_clean_1)
+data_clean_final <- anti_join(data_clean_3, data_clean_4)
 
 # Preserve original and most recent responses in one final data frame.
-data_final <- rbind(data_clean, data_clean3)
+data_final <- rbind(data_clean_4, data_clean_final)
 
-
-#### Database Export ----
-
-
-# Write dataframe to a SQL database object with help from RSQLite and DBI packages 
-
-# Install and Load RODBC package using pacman::p_load()
-pacman::p_load(RODBC)
-
-# Reference the location of the existing database - in the specified shared area
-#C:\Users\JamesAbrams\Hartley McMaster Ltd\Reference - Files\Training
-db <- "C:/Users/JamesAbrams/Hartley McMaster Ltd/Reference - Files/Training/Contract Finder.accdb"
-
-# Establish the connection with the "odbcConnectAccess2007()" function
-con <- RODBC::odbcConnectAccess2007(db)
-
-# Save the new dataframe as a table in the sql database.
-sqlSave(con, data_final)
 
 # Cleaning the environment
-rm(data_clean, data_clean2, data_clean3)
+rm(data_clean_1, data_clean_2, data_clean_3, data_clean_4, data_clean_final)
 # rm(data_final_new, data_final_new_2, data_final_new_3)
+
 
 #### Exploring the Data ----
 
+# Investigating Head, dimensions, summary for brief overview of our database
 df <- data_final
 head(df)
 dim(df)
 summary(df)
 
 
-# Ensure number format is applied correctly
+# Ensure number format is applied correctly (before exporting to excel)
+# Numbers are stored as text by default
 typeof(df$awards.value.amount)
 
 df[, c("awards.value.amount", "tender.items.classification.id",
@@ -102,12 +98,12 @@ df[, c("awards.value.amount", "tender.items.classification.id",
   sapply(df[, c("awards.value.amount", "tender.items.classification.id",
                 "tender.minValue.amount", "tender.value.amount")], as.numeric)
 
-# TODO: Fix date format columns.
-
+# Ensure date format is applied correctly (before exporting to excel)
+# Dates are stored as text by default
 typeof(df$date)
 
 df <- df %>%
-  # Fixing date formats 
+  # Fixing date formats using substr() to extract only the first 10 characters of the date each time
   mutate(time = substr(date , start = 12 , stop = 19)) %>%
   mutate(date = as.Date(substr(date , start = 1 , stop = 10))) %>%
   mutate(awards.date = as.Date(substr(awards.date , start = 1, stop = 10))) %>%
@@ -120,22 +116,36 @@ df <- df %>%
   select(date, time, everything(.))
 
 
-
-
-library(openxlsx)
-# Excluding decimal readings in our formatting
-options("openxlsx.numFmt" = "0") # 2 decimal cases formating
-openxlsx::write.xlsx(df, 
-                     #file = "C:/Users/JamesAbrams/Desktop/Contract Finder API.xlsx", 
-                     file = "Contract Finder API.xlsx",
-                     asTable = TRUE, 
-                     sheetName = "Test")
+#### Competitor Intel ----
 
 # Emulating pivot tables in R with dplyr::summarize() and dplyr::group_by()
-
 df_test <- df %>%
   group_by(buyer.name, awards.suppliers.name) %>%
   summarise(sum = sum(awards.value.amount),
             awards.value.amount = n()) %>%
   arrange(desc(sum))
+
+
+#### Percentile & Clientele ----
+
+# This is included to deliver an estimation of scale of competitors.
+# Using df_test as a starting point
+
+# Return the 10%, 50% and 90% percentile
+percentile <- as.data.frame(quantile(df_test$sum, probs = c(0.1, 0.5, 0.9)))
+names(percentile) <- "contract_value"
+percentile <- t(percentile)
+
+# Return info on the suppliers top public sector client found in the database.
+client <- df_test %>%
+  mutate(`temp` = 1) %>%
+  group_by(temp) %>%
+  mutate(total = sum(sum)) %>%
+  ungroup() %>%
+  mutate(percentage = paste0(as.character(round(sum / total * 100, 1)), "%")) %>%
+  select(buyer.name, percentage) %>%
+  head(5) %>%
+  rename("Top 5 Clients" = "buyer.name")
+
+
 
